@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { del } from "@vercel/blob";
 import { buildCoverPage } from "@/lib/buildCoverPage";
 import { mergePdfs } from "@/lib/mergePdfs";
 import fs from "fs";
@@ -24,23 +23,22 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-  let blobUrl: string | undefined;
   try {
-    const body = (await req.json()) as { blobUrl: string; data: string };
-    blobUrl = body.blobUrl;
-    const dataStr = body.data;
+    const formData = await req.formData();
+    const file = formData.get("pdf");
+    const dataStr = formData.get("data");
 
-    if (!blobUrl) return NextResponse.json({ error: "No blobUrl provided" }, { status: 400 });
-    if (!dataStr) return NextResponse.json({ error: "No submittal data provided" }, { status: 400 });
+    if (!file || typeof file === "string") {
+      return NextResponse.json({ error: "No PDF file provided" }, { status: 400 });
+    }
+    if (!dataStr || typeof dataStr !== "string") {
+      return NextResponse.json({ error: "No submittal data provided" }, { status: 400 });
+    }
 
     const submittalData: SubmittalData = JSON.parse(dataStr);
+    const supplierBuffer = Buffer.from(await (file as File).arrayBuffer());
 
-    // Fetch supplier PDF from Blob storage
-    const pdfRes = await fetch(blobUrl);
-    if (!pdfRes.ok) throw new Error(`Failed to fetch PDF from storage: ${pdfRes.status}`);
-    const supplierBuffer = Buffer.from(await pdfRes.arrayBuffer());
-
-    // Load logo from public assets (available on the filesystem in Node.js runtime)
+    // Load logo from public assets
     let logoBytes: Uint8Array | undefined;
     try {
       const logoPath = path.join(process.cwd(), "public", "assets", "patriot_logo.png");
@@ -49,9 +47,6 @@ export async function POST(req: NextRequest) {
 
     const coverBytes = await buildCoverPage(submittalData, logoBytes);
     const mergedBytes = await mergePdfs(coverBytes, supplierBuffer);
-
-    // Clean up the blob now that we have the merged PDF in memory
-    try { await del(blobUrl); } catch { /* non-fatal */ }
 
     const jobPart = slugify(submittalData.jobNo || "Job");
     const projPart = slugify(submittalData.subject.projectName || "Submittal");

@@ -79,6 +79,10 @@ export default function Home() {
   // ── extract ───────────────────────────────────────────────────────────────
   const handleExtract = async () => {
     if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setError("File is too large (max 20 MB). Please reduce the PDF size and try again.");
+      return;
+    }
     setExtracting(true);
     setError("");
     try {
@@ -86,8 +90,10 @@ export default function Home() {
       fd.append("pdf", file);
       const res = await fetch("/api/extract", { method: "POST", body: fd });
       if (!res.ok) {
-        const j = await res.json();
-        throw new Error(j.error || "Extraction failed");
+        const text = await res.text();
+        let msg = "Extraction failed";
+        try { msg = (JSON.parse(text) as { error?: string }).error || msg; } catch { msg = text.slice(0, 300) || msg; }
+        throw new Error(msg);
       }
       const data = await res.json();
       setForm({ ...emptyData(), ...data });
@@ -110,8 +116,10 @@ export default function Home() {
       fd.append("data", JSON.stringify(form));
       const res = await fetch("/api/generate", { method: "POST", body: fd });
       if (!res.ok) {
-        const j = await res.json();
-        throw new Error(j.error || "Generation failed");
+        const text = await res.text();
+        let msg = "Generation failed";
+        try { msg = (JSON.parse(text) as { error?: string }).error || msg; } catch { msg = text.slice(0, 300) || msg; }
+        throw new Error(msg);
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

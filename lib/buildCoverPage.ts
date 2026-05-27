@@ -6,8 +6,6 @@ import {
   PDFFont,
   PDFImage,
 } from "pdf-lib";
-import fs from "fs";
-import path from "path";
 import type { SubmittalData } from "@/types/submittal";
 
 // Letter size in points (72pt per inch)
@@ -85,7 +83,7 @@ function cellText(
 
 // ─── main export ──────────────────────────────────────────────────────────────
 
-export async function buildCoverPage(data: SubmittalData): Promise<Uint8Array> {
+export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
 
@@ -96,19 +94,16 @@ export async function buildCoverPage(data: SubmittalData): Promise<Uint8Array> {
   let logoImage: PDFImage | null = null;
   let logoW = 0;
   let logoH = 0;
-  try {
-    const logoPath = path.join(process.cwd(), "public", "assets", "patriot_logo.png");
-    if (fs.existsSync(logoPath)) {
-      const logoBytes = fs.readFileSync(logoPath);
+  if (logoBytes) {
+    try {
       logoImage = await pdfDoc.embedPng(logoBytes);
       const dims = logoImage.scale(1);
-      // Scale to target width of 160pt
       const scale = 200 / dims.width;
       logoW = 200;
       logoH = dims.height * scale;
+    } catch {
+      // Falls back to text placeholder below
     }
-  } catch {
-    // Logo not found — falls back to text below
   }
 
   // ── Header section (y: 742 → 650) ──────────────────────────────────────────

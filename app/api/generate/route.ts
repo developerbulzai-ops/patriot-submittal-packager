@@ -3,7 +3,7 @@ import { buildCoverPage } from "@/lib/buildCoverPage";
 import { mergePdfs } from "@/lib/mergePdfs";
 import type { SubmittalData } from "@/types/submittal";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const maxDuration = 60;
 
 function slugify(str: string): string {
@@ -36,8 +36,16 @@ export async function POST(req: NextRequest) {
     const submittalData: SubmittalData = JSON.parse(dataStr);
     const supplierBuffer = Buffer.from(await (file as File).arrayBuffer());
 
+    // Fetch logo from public assets (CDN in production, localhost in dev)
+    let logoBytes: Uint8Array | undefined;
+    try {
+      const logoUrl = new URL("/assets/patriot_logo.png", req.url);
+      const logoRes = await fetch(logoUrl.toString());
+      if (logoRes.ok) logoBytes = new Uint8Array(await logoRes.arrayBuffer());
+    } catch { /* use text fallback */ }
+
     // Build the Patriot-branded cover page
-    const coverBytes = await buildCoverPage(submittalData);
+    const coverBytes = await buildCoverPage(submittalData, logoBytes);
 
     // Merge cover + all supplier pages
     const mergedBytes = await mergePdfs(coverBytes, supplierBuffer);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import type { SubmittalData, LineItem } from "@/types/submittal";
 
 type Step = "upload" | "review" | "generating" | "done";
@@ -49,6 +50,8 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [blobUrl, setBlobUrl] = useState("");
   const [error, setError] = useState("");
   const [form, setForm] = useState<SubmittalData>(emptyData());
   const [downloadUrl, setDownloadUrl] = useState("");
@@ -79,16 +82,27 @@ export default function Home() {
   // ── extract ───────────────────────────────────────────────────────────────
   const handleExtract = async () => {
     if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      setError("File is too large (max 20 MB). Please reduce the PDF size and try again.");
+    if (file.size > 50 * 1024 * 1024) {
+      setError("File is too large (max 50 MB).");
       return;
     }
     setExtracting(true);
     setError("");
     try {
-      const fd = new FormData();
-      fd.append("pdf", file);
-      const res = await fetch("/api/extract", { method: "POST", body: fd });
+      // Upload PDF directly to Blob storage (bypasses Vercel's 4.5 MB function limit)
+      setUploadStatus("Uploading PDF…");
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+      });
+      setBlobUrl(blob.url);
+      setUploadStatus("Extracting with AI…");
+
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blobUrl: blob.url }),
+      });
       if (!res.ok) {
         const text = await res.text();
         let msg = "Extraction failed";
@@ -102,19 +116,21 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Extraction failed");
     } finally {
       setExtracting(false);
+      setUploadStatus("");
     }
   };
 
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!file) return;
+    if (!blobUrl) return;
     setStep("generating");
     setError("");
     try {
-      const fd = new FormData();
-      fd.append("pdf", file);
-      fd.append("data", JSON.stringify(form));
-      const res = await fetch("/api/generate", { method: "POST", body: fd });
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blobUrl, data: JSON.stringify(form) }),
+      });
       if (!res.ok) {
         const text = await res.text();
         let msg = "Generation failed";
@@ -240,7 +256,7 @@ export default function Home() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
-                  Extracting with AI…
+                  {uploadStatus || "Processing…"}
                 </span>
               ) : (
                 "Extract & Review →"
@@ -406,6 +422,7 @@ export default function Home() {
                 setFile(null);
                 setForm(emptyData());
                 setDownloadUrl("");
+                setBlobUrl("");
                 setError("");
               }}
               className="text-sm text-slate-400 hover:text-slate-200 underline"

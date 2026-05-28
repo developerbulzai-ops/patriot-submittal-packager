@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildExcel } from "@/lib/buildExcel";
+import { renderPdfPages } from "@/lib/renderPdfPages";
 import fs from "fs";
 import path from "path";
 import type { SubmittalData } from "@/types/submittal";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function slugify(str: string): string {
   return str
@@ -17,7 +18,24 @@ function slugify(str: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const submittalData = (await req.json()) as SubmittalData;
+    let submittalData: SubmittalData;
+    let pdfBuffer: Buffer | undefined;
+
+    const contentType = req.headers.get("content-type") ?? "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const fd = await req.formData();
+      const dataStr = fd.get("data");
+      if (typeof dataStr !== "string") throw new Error("Missing form field: data");
+      submittalData = JSON.parse(dataStr) as SubmittalData;
+
+      const pdfFile = fd.get("pdf");
+      if (pdfFile instanceof Blob) {
+        pdfBuffer = Buffer.from(await pdfFile.arrayBuffer());
+      }
+    } else {
+      submittalData = (await req.json()) as SubmittalData;
+    }
 
     let logoBuffer: Buffer | undefined;
     try {
@@ -25,7 +43,17 @@ export async function POST(req: NextRequest) {
       logoBuffer = fs.readFileSync(logoPath);
     } catch { /* use text fallback */ }
 
-    const xlsxBuffer = await buildExcel(submittalData, logoBuffer);
+    // Render supplier PDF pages (skip page 1 = their cover)
+    let pageImages;
+    if (pdfBuffer) {
+      try {
+        pageImages = await renderPdfPages(pdfBuffer);
+      } catch (renderErr) {
+        console.error("PDF render warning (continuing without pages):", renderErr);
+      }
+    }
+
+    const xlsxBuffer = await buildExcel(submittalData, logoBuffer, pageImages);
 
     const jobPart = slugify(submittalData.jobNo || "Job");
     const projPart = slugify(submittalData.subject.projectName || "Submittal");

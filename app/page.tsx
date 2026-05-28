@@ -88,11 +88,11 @@ export default function Home() {
   const handleGenerate = async () => {
     setStep("generating"); setError("");
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      const fd = new FormData();
+      fd.append("data", JSON.stringify(form));
+      if (file) fd.append("pdf", file);
+
+      const res = await fetch("/api/generate", { method: "POST", body: fd });
       if (!res.ok) {
         const text = await res.text();
         let msg = "Generation failed";

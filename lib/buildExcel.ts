@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { SubmittalData } from "@/types/submittal";
+import type { PageImage } from "./renderPdfPages";
 
 // ── layout constants ──────────────────────────────────────────────────────────
 // 4-column layout:  A=left address  B=logo area  C=right header/content  D=page nums
@@ -50,7 +51,11 @@ function styleCell(
 
 // ── main export ───────────────────────────────────────────────────────────────
 
-export async function buildExcel(data: SubmittalData, logoBuffer?: Buffer): Promise<Buffer> {
+export async function buildExcel(
+  data: SubmittalData,
+  logoBuffer?: Buffer,
+  pageImages?: PageImage[]
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Patriot Pipeline Inc.";
   wb.created = new Date();
@@ -251,6 +256,41 @@ export async function buildExcel(data: SubmittalData, logoBuffer?: Buffer): Prom
   wb.addWorksheet("Blank", {
     pageSetup: { paperSize: 1 as number, orientation: "portrait" },
   });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Sheets 3+ — Supplier data-sheet pages (one sheet per PDF page)
+  // ════════════════════════════════════════════════════════════════════════════
+  if (pageImages && pageImages.length > 0) {
+    for (let i = 0; i < pageImages.length; i++) {
+      const img = pageImages[i];
+      // Final doc page numbers: Title=1, Blank=2, supplier pages start at 3
+      const finalPage = i + 3;
+
+      const pageWs = wb.addWorksheet(`Page ${finalPage}`, {
+        pageSetup: {
+          paperSize: 1 as number,
+          orientation: img.width > img.height ? "landscape" : "portrait",
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 1,
+          horizontalCentered: true,
+          verticalCentered: true,
+        },
+      });
+
+      pageWs.pageSetup.margins = {
+        left: 0.5, right: 0.5,
+        top: 0.5, bottom: 0.5,
+        header: 0, footer: 0,
+      };
+
+      const imgId = wb.addImage({ buffer: img.buffer as any, extension: "png" });
+      pageWs.addImage(imgId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: img.width, height: img.height },
+      });
+    }
+  }
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);

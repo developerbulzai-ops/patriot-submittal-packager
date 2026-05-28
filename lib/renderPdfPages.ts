@@ -1,93 +1,41 @@
-import path from "path";
-import { pathToFileURL } from "url";
-import type { RenderParameters } from "pdfjs-dist/types/src/display/api";
-
 export interface PageImage {
   buffer: Buffer;
   width: number;
   height: number;
 }
 
-type CanvasLike = {
-  getContext: (t: string) => unknown;
-  width: number;
-  height: number;
-  toBuffer: (t: string) => Buffer;
-};
-
-class NodeCanvasFactory {
-  private _create: (w: number, h: number) => CanvasLike;
-
-  constructor(createCanvas: (w: number, h: number) => CanvasLike) {
-    this._create = createCanvas;
-  }
-
-  create(width: number, height: number) {
-    const canvas = this._create(width, height);
-    return { canvas, context: canvas.getContext("2d") };
-  }
-
-  reset(pair: { canvas: CanvasLike }, w: number, h: number) {
-    pair.canvas.width = w;
-    pair.canvas.height = h;
-  }
-
-  destroy(pair: { canvas: CanvasLike }) {
-    pair.canvas.width = 0;
-    pair.canvas.height = 0;
-  }
-}
-
 export async function renderPdfPages(pdfBuffer: Buffer): Promise<PageImage[]> {
-  // webpackIgnore: pdfjs-dist is ESM-only and must NOT be bundled by webpack —
-  // it has to load natively via Node.js import() at runtime. Bundling it causes
-  // module-initialization failures on Lambda that crash the entire route.
+  // mupdf is WASM-based — no native binaries, works on all Node.js environments.
+  // webpackIgnore prevents webpack from bundling it (WASM wrappers break when bundled).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjsLib: any = await import(/* webpackIgnore: true */ "pdfjs-dist/legacy/build/pdf.mjs");
+  const mupdf: any = await import(/* webpackIgnore: true */ "mupdf");
 
-  // canvas is in webpack externals — webpack emits require("canvas") which Node.js
-  // resolves to the native binary at runtime (errors here are caught by the caller)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createCanvas } = require("canvas") as { createCanvas: (w: number, h: number) => CanvasLike };
+  const doc = mupdf.Document.openDocument(
+    new Uint8Array(pdfBuffer),
+    "application/pdf"
+  );
 
-  // Worker must reference the actual file on disk via file:// URL
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
-    path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")
-  ).href;
-
-  const canvasFactory = new NodeCanvasFactory(createCanvas);
-
-  const pdfDoc = await pdfjsLib
-    .getDocument({
-      data: new Uint8Array(pdfBuffer),
-      cMapUrl: path.join(process.cwd(), "node_modules/pdfjs-dist/cmaps/"),
-      cMapPacked: true,
-      standardFontDataUrl: path.join(
-        process.cwd(),
-        "node_modules/pdfjs-dist/standard_fonts/"
-      ),
-      canvasFactory,
-    } as unknown)
-    .promise;
-
+  const numPages: number = doc.countPages();
   const pages: PageImage[] = [];
 
-  // Skip page 1 (supplier cover), render pages 2-N
-  for (let pageNum = 2; pageNum <= pdfDoc.numPages; pageNum++) {
-    const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.5 }); // ~144 DPI
-    const w = Math.ceil(viewport.width);
-    const h = Math.ceil(viewport.height);
+  // i=0 is supplier cover page — skip it, start at i=1
+  for (let i = 1; i < numPages; i++) {
+    const page = doc.loadPage(i);
+    const scale = 1.5; // ~108 DPI (72 DPI base × 1.5)
+    const pixmap = page.toPixmap(
+      [scale, 0, 0, scale, 0, 0],
+      mupdf.ColorSpace.DeviceRGB,
+      false
+    );
 
-    const { canvas, context } = canvasFactory.create(w, h);
+    pages.push({
+      buffer: Buffer.from(pixmap.asPNG() as Uint8Array),
+      width: pixmap.getWidth() as number,
+      height: pixmap.getHeight() as number,
+    });
 
-    await page.render({
-      canvasContext: context,
-      viewport,
-    } as unknown as RenderParameters).promise;
-
-    pages.push({ buffer: canvas.toBuffer("image/png"), width: w, height: h });
-    canvasFactory.destroy({ canvas });
+    pixmap.destroy();
+    page.destroy();
   }
 
   return pages;

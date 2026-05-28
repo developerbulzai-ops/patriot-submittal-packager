@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -8,28 +7,19 @@ const nextConfig: NextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
-    // Use legacy build of pdfjs-dist in Node.js (avoids DOMMatrix error)
-    config.resolve = {
-      ...config.resolve,
-      alias: {
-        ...(config.resolve?.alias ?? {}),
-        "pdfjs-dist": path.join(
-          process.cwd(),
-          "node_modules/pdfjs-dist/legacy/build/pdf.mjs"
-        ),
-      },
-    };
-
     if (isServer) {
-      // canvas is a native module — must be required at runtime, not bundled
-      const ext = Array.isArray(config.externals)
-        ? config.externals
-        : config.externals
-        ? [config.externals]
-        : [];
-      config.externals = [...ext, "canvas"];
+      // canvas is a native module — must not be bundled, require()d at runtime
+      // pdfjs-dist is handled via /* webpackIgnore: true */ at the import site
+      if (Array.isArray(config.externals)) {
+        config.externals = [...config.externals, "canvas"];
+      } else if (typeof config.externals === "function") {
+        config.externals = [config.externals, "canvas"];
+      } else if (config.externals) {
+        config.externals = [config.externals, "canvas"];
+      } else {
+        config.externals = ["canvas"];
+      }
     }
-
     return config;
   },
 };

@@ -1,8 +1,12 @@
 export interface LineItem {
   description: string;
-  /** Page number in the OUTPUT PDF (Patriot cover = 1, so supplier pages shift +1) */
-  startPage: number;
+  startPage: number; // page in the final assembled document (title=1, blank=2, data starts at 3)
   endPage: number;
+}
+
+export interface CategoryGroup {
+  name: string;
+  lineItems: LineItem[];
 }
 
 export interface SubmittalData {
@@ -18,6 +22,5 @@ export interface SubmittalData {
     projectName: string;
     location: string;
   };
-  category: string;
-  lineItems: LineItem[];
+  categories: CategoryGroup[];
 }

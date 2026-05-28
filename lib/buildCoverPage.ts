@@ -254,11 +254,12 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
 
   let tocY = tocTop - hdrH;
 
-  // Category header row (full width, bold, centered)
-  if (data.category) {
+  // Category sections
+  for (const category of data.categories) {
+    // Category header row (full width, bold, centered)
     drawCell(page, MARGIN, tocY, CONTENT_W, hdrH);
-    const catW = helvBold.widthOfTextAtSize(data.category, 10);
-    page.drawText(data.category, {
+    const catW = helvBold.widthOfTextAtSize(category.name, 10);
+    page.drawText(category.name, {
       x: MARGIN + (CONTENT_W - catW) / 2,
       y: tocY - hdrH + 5,
       size: 10,
@@ -266,10 +267,9 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
       color: BLACK,
     });
     tocY -= hdrH;
-  }
 
-  // Line item rows
-  for (const item of data.lineItems) {
+  // Line item rows (inside category loop — closed below)
+  for (const item of category.lineItems) {
     const pageStr =
       item.startPage === item.endPage
         ? `${item.startPage}`
@@ -282,6 +282,7 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
 
     tocY -= rowH;
   }
+  } // end category loop
 
   // Bottom border line for last row if table didn't draw one automatically
   drawHLine(page, MARGIN, tocY, CONTENT_W);

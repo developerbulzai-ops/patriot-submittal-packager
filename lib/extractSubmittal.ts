@@ -1,22 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { SubmittalData } from "@/types/submittal";
+import type { SubmittalData, CategoryGroup } from "@/types/submittal";
 
 const EXTRACTION_PROMPT = `You are analyzing a supplier submittal PDF for a construction project.
 
-Extract the following information and return ONLY a valid JSON object (no markdown, no explanation):
+CRITICAL — HIGHLIGHTED TEXT: Suppliers highlight (yellow or colored background) the specific sizes,
+gauges, and specs that apply to this particular job. When naming line items, use ONLY the highlighted
+specifications, not the full range printed on the data sheet. For example: if a pipe data sheet lists
+sizes 4"–48" but only 18" is highlighted, the line item title must say "18\" SDR-35 PVC Pipe" — not
+the full range. If no highlighting is visible, use the most prominent or first-listed specification.
 
-1. From the cover page (page 1 of the PDF):
-   - Project/submittal title (becomes category header in our TOC, e.g. "On-Site Rough Grade Storm Drain Pipe and Fittings")
-   - Project name and location (e.g. "Walmart Wildomar Phase 1 Utilities", location address)
-   - Any recipient info, job number, or date if visible
+CATEGORIES: Supplier cover sheets and section headers indicate the submittal category
+(e.g. "On-Site Rough Grade Storm Drain Pipe and Fittings", "Off-Site Storm Drain", "Fire",
+"Water", "Sewer"). Detect ALL categories present in the package and group line items under them.
+Common categories: On-Site, Off-Site, Fire, Water, Storm Drain, Sewer — but use whatever the
+document actually says.
 
-2. For pages 2 through the end: identify groups of pages by manufacturer/product:
+Extract the following and return ONLY a valid JSON object (no markdown, no explanation):
+
+1. From the cover page (page 1): recipient info, job number, date, project name, location.
+2. For pages 2 through the end: group by manufacturer/product into categories.
    - Each group = one TOC line item
-   - Format description as "ManufacturerName - ProductDescription"
-   - Group related products from the same manufacturer together
-   - If two manufacturers supply the same product type, list them under a single item led by the primary/first manufacturer
-   - Record exact start and end page numbers within THIS PDF (1-indexed, page 1 = supplier cover)
+   - Format description as "ManufacturerName - HighlightedSpec ProductType"
+   - Record exact start and end page numbers in THIS PDF (1-indexed, page 1 = supplier cover)
    - Page 1 (supplier cover) is NOT a line item
+   - If two manufacturers supply the same product, list them under one item
 
 Return this exact JSON structure:
 {
@@ -32,24 +39,27 @@ Return this exact JSON structure:
     "projectName": null,
     "location": null
   },
-  "category": null,
-  "lineItems": [
+  "categories": [
     {
-      "description": "Manufacturer Name - Product Description",
-      "startPage": 2,
-      "endPage": 4
+      "name": "On-Site Rough Grade Storm Drain Pipe and Fittings",
+      "lineItems": [
+        {
+          "description": "JM Eagle - 18\" SDR-35 PVC Pipe",
+          "startPage": 2,
+          "endPage": 6
+        }
+      ]
     }
   ]
 }
 
 Rules:
-- category: a concise description of the overall product type (e.g. "On-Site Rough Grade Storm Drain Pipe and Fittings")
-- lineItems must cover all pages from page 2 to the last page with no gaps and no overlaps
+- categories: detect ALL utility categories in the package; each gets its own object
+- lineItems within each category must cover all pages in that section with no gaps or overlaps
 - Page numbers are in the SUPPLIER PDF (not the final output)
-- Combine manufacturers making the same product into one line item spanning all their pages`;
+- Use highlighted/circled specs for item titles; never list the full range from the data sheet`;
 
 function extractJSON(text: string): unknown {
-  // Strip markdown code fences if present
   const cleaned = text
     .replace(/^```(?:json)?\s*/m, "")
     .replace(/\s*```\s*$/m, "")
@@ -59,26 +69,16 @@ function extractJSON(text: string): unknown {
 
 export async function extractSubmittal(
   pdfBuffer: Buffer
-): Promise<Partial<SubmittalData> & { lineItems: Array<{ description: string; startPage: number; endPage: number }> }> {
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
-
+): Promise<Partial<SubmittalData> & { categories: CategoryGroup[] }> {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const base64Pdf = pdfBuffer.toString("base64");
 
   const content: Anthropic.MessageParam["content"] = [
     {
       type: "document",
-      source: {
-        type: "base64",
-        media_type: "application/pdf",
-        data: base64Pdf,
-      },
+      source: { type: "base64", media_type: "application/pdf", data: base64Pdf },
     } as Anthropic.DocumentBlockParam,
-    {
-      type: "text",
-      text: EXTRACTION_PROMPT,
-    },
+    { type: "text", text: EXTRACTION_PROMPT },
   ];
 
   const message = await anthropic.messages.create({
@@ -95,16 +95,21 @@ export async function extractSubmittal(
     date: string | null;
     recipient: { company: string | null; attention: string | null; address1: string | null; city: string | null };
     subject: { projectName: string | null; location: string | null };
-    category: string | null;
-    lineItems: Array<{ description: string; startPage: number; endPage: number }>;
+    categories: Array<{
+      name: string;
+      lineItems: Array<{ description: string; startPage: number; endPage: number }>;
+    }>;
   };
 
-  // Page number mapping: supplier cover (page 1) is stripped, Patriot cover becomes page 1.
-  // Supplier page 2 → output page 2, so offset = 0. No adjustment needed.
-  const lineItems = (raw.lineItems || []).map((item) => ({
-    description: item.description,
-    startPage: item.startPage,
-    endPage: item.endPage,
+  // Page number mapping: supplier cover (page 1) stripped, Patriot title = page 1,
+  // blank sheet = page 2, so supplier page K → output page K+1.
+  const categories: CategoryGroup[] = (raw.categories || []).map((cat) => ({
+    name: cat.name || "",
+    lineItems: (cat.lineItems || []).map((item) => ({
+      description: item.description,
+      startPage: item.startPage + 1,
+      endPage: item.endPage + 1,
+    })),
   }));
 
   return {
@@ -120,7 +125,6 @@ export async function extractSubmittal(
       projectName: raw.subject?.projectName || "",
       location: raw.subject?.location || "",
     },
-    category: raw.category || "",
-    lineItems,
+    categories,
   };
 }

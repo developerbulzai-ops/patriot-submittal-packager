@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import type { SubmittalData, LineItem } from "@/types/submittal";
+import type { SubmittalData, CategoryGroup, LineItem } from "@/types/submittal";
 
 type Step = "upload" | "review" | "generating" | "done";
 
@@ -10,31 +10,19 @@ const emptyData = (): SubmittalData => ({
   date: "",
   recipient: { company: "", attention: "", address1: "", city: "" },
   subject: { projectName: "", location: "" },
-  category: "",
-  lineItems: [],
+  categories: [],
 });
 
-// ── small field component ─────────────────────────────────────────────────────
 function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
+  label, value, onChange, placeholder,
 }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-        {label}
-      </label>
+      <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</label>
       <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        type="text" value={value} onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-100
                    placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -43,7 +31,6 @@ function Field({
   );
 }
 
-// ── main page ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const [step, setStep] = useState<Step>("upload");
   const [dragging, setDragging] = useState(false);
@@ -52,7 +39,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [form, setForm] = useState<SubmittalData>(emptyData());
   const [downloadUrl, setDownloadUrl] = useState("");
-  const [downloadName, setDownloadName] = useState("submittal.pdf");
+  const [downloadName, setDownloadName] = useState("submittal.xlsx");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── drag and drop ─────────────────────────────────────────────────────────
@@ -60,20 +47,13 @@ export default function Home() {
     e.preventDefault();
     setDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped?.type === "application/pdf") {
-      setFile(dropped);
-      setError("");
-    } else {
-      setError("Please upload a PDF file.");
-    }
+    if (dropped?.type === "application/pdf") { setFile(dropped); setError(""); }
+    else setError("Please upload a PDF file.");
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0];
-    if (picked) {
-      setFile(picked);
-      setError("");
-    }
+    if (picked) { setFile(picked); setError(""); }
   };
 
   // ── extract ───────────────────────────────────────────────────────────────
@@ -83,8 +63,7 @@ export default function Home() {
       setError("File is too large for the current host (max 4 MB). Compress the PDF and try again.");
       return;
     }
-    setExtracting(true);
-    setError("");
+    setExtracting(true); setError("");
     try {
       const fd = new FormData();
       fd.append("pdf", file);
@@ -95,7 +74,7 @@ export default function Home() {
         try { msg = (JSON.parse(text) as { error?: string }).error || msg; } catch { msg = text.slice(0, 300) || msg; }
         throw new Error(msg);
       }
-      const data = await res.json();
+      const data = await res.json() as Partial<SubmittalData>;
       setForm({ ...emptyData(), ...data });
       setStep("review");
     } catch (err) {
@@ -107,14 +86,13 @@ export default function Home() {
 
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!file) return;
-    setStep("generating");
-    setError("");
+    setStep("generating"); setError("");
     try {
-      const fd = new FormData();
-      fd.append("pdf", file);
-      fd.append("data", JSON.stringify(form));
-      const res = await fetch("/api/generate", { method: "POST", body: fd });
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
       if (!res.ok) {
         const text = await res.text();
         let msg = "Generation failed";
@@ -125,7 +103,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const disposition = res.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/);
-      setDownloadName(match?.[1] ?? "Patriot_Submittal.pdf");
+      setDownloadName(match?.[1] ?? "Patriot_Submittal.xlsx");
       setDownloadUrl(url);
       setStep("done");
     } catch (err) {
@@ -134,60 +112,60 @@ export default function Home() {
     }
   };
 
-  // ── line item helpers ─────────────────────────────────────────────────────
-  const updateLineItem = (idx: number, field: keyof LineItem, val: string | number) => {
-    setForm((f) => {
-      const items = [...f.lineItems];
-      items[idx] = { ...items[idx], [field]: val };
-      return { ...f, lineItems: items };
-    });
-  };
+  // ── category / line-item helpers ──────────────────────────────────────────
+  const setCategories = (cats: CategoryGroup[]) => setForm((f) => ({ ...f, categories: cats }));
 
-  const addLineItem = () => {
-    setForm((f) => ({
-      ...f,
-      lineItems: [...f.lineItems, { description: "", startPage: 0, endPage: 0 }],
-    }));
-  };
+  const updateCatName = (ci: number, name: string) =>
+    setCategories(form.categories.map((c, i) => i === ci ? { ...c, name } : c));
 
-  const removeLineItem = (idx: number) => {
-    setForm((f) => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }));
-  };
+  const removeCategory = (ci: number) =>
+    setCategories(form.categories.filter((_, i) => i !== ci));
+
+  const addCategory = () =>
+    setCategories([...form.categories, { name: "", lineItems: [] }]);
+
+  const updateItem = (ci: number, ii: number, field: keyof LineItem, val: string | number) =>
+    setCategories(form.categories.map((c, i) =>
+      i !== ci ? c : {
+        ...c,
+        lineItems: c.lineItems.map((item, j) =>
+          j !== ii ? item : { ...item, [field]: val }
+        ),
+      }
+    ));
+
+  const addItem = (ci: number) =>
+    setCategories(form.categories.map((c, i) =>
+      i !== ci ? c : { ...c, lineItems: [...c.lineItems, { description: "", startPage: 0, endPage: 0 }] }
+    ));
+
+  const removeItem = (ci: number, ii: number) =>
+    setCategories(form.categories.map((c, i) =>
+      i !== ci ? c : { ...c, lineItems: c.lineItems.filter((_, j) => j !== ii) }
+    ));
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Header */}
       <header className="border-b border-slate-800 px-8 py-5 flex items-center gap-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/assets/patriot_logo.png"
-          alt="Patriot Pipeline"
-          className="h-10 w-auto"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
+        <img src="/assets/patriot_logo.png" alt="Patriot Pipeline" className="h-10 w-auto"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
         <div>
           <h1 className="text-lg font-bold tracking-tight">Patriot Pipeline Inc.</h1>
-          <p className="text-xs text-slate-400 tracking-widest uppercase">
-            Submittal Packager
-          </p>
+          <p className="text-xs text-slate-400 tracking-widest uppercase">Submittal Packager</p>
         </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-10">
+
         {/* ── STEP: upload ─────────────────────────────────────────────── */}
-        {(step === "upload") && (
+        {step === "upload" && (
           <div className="flex flex-col gap-8">
             <div>
               <h2 className="text-2xl font-bold mb-1">New Submittal</h2>
-              <p className="text-slate-400 text-sm">
-                Upload a supplier submittal PDF to generate a Patriot-branded package.
-              </p>
+              <p className="text-slate-400 text-sm">Upload a supplier submittal PDF to generate a Patriot-branded Excel package.</p>
             </div>
-
-            {/* Drop zone */}
             <div
               className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed
                           p-14 transition-colors cursor-pointer
@@ -198,13 +176,7 @@ export default function Home() {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf"
-                className="sr-only"
-                onChange={handleFileChange}
-              />
+              <input ref={fileInputRef} type="file" accept="application/pdf" className="sr-only" onChange={handleFileChange} />
               {file ? (
                 <>
                   <svg className="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -224,16 +196,9 @@ export default function Home() {
                 </>
               )}
             </div>
-
             {error && <p className="text-red-400 text-sm">{error}</p>}
-
-            <button
-              onClick={handleExtract}
-              disabled={!file || extracting}
-              className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700
-                         disabled:text-slate-500 py-3 font-semibold text-sm tracking-wide
-                         transition-colors disabled:cursor-not-allowed"
-            >
+            <button onClick={handleExtract} disabled={!file || extracting}
+              className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 py-3 font-semibold text-sm tracking-wide transition-colors disabled:cursor-not-allowed">
               {extracting ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -242,9 +207,7 @@ export default function Home() {
                   </svg>
                   Extracting with AI…
                 </span>
-              ) : (
-                "Extract & Review →"
-              )}
+              ) : "Extract & Review →"}
             </button>
           </div>
         )}
@@ -255,14 +218,10 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold mb-1">Review & Edit</h2>
-                <p className="text-slate-400 text-sm">Confirm or fill in the extracted details.</p>
+                <p className="text-slate-400 text-sm">Confirm the extracted details before generating the Excel.</p>
               </div>
-              <button
-                onClick={() => { setStep("upload"); setError(""); }}
-                className="text-xs text-slate-400 hover:text-slate-200 underline"
-              >
-                ← Upload different file
-              </button>
+              <button onClick={() => { setStep("upload"); setError(""); }}
+                className="text-xs text-slate-400 hover:text-slate-200 underline">← Upload different file</button>
             </div>
 
             {/* Job info */}
@@ -278,7 +237,7 @@ export default function Home() {
             <section className="rounded-xl bg-slate-800 border border-slate-700 p-5 flex flex-col gap-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">To</h3>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Company" value={form.recipient.company} onChange={(v) => setForm((f) => ({ ...f, recipient: { ...f.recipient, company: v } }))} placeholder="General contractor name" />
+                <Field label="Company" value={form.recipient.company} onChange={(v) => setForm((f) => ({ ...f, recipient: { ...f.recipient, company: v } }))} placeholder="General contractor" />
                 <Field label="Attention" value={form.recipient.attention} onChange={(v) => setForm((f) => ({ ...f, recipient: { ...f.recipient, attention: v } }))} placeholder="Contact name" />
                 <Field label="Address" value={form.recipient.address1} onChange={(v) => setForm((f) => ({ ...f, recipient: { ...f.recipient, address1: v } }))} placeholder="Street address" />
                 <Field label="City / State / Zip" value={form.recipient.city} onChange={(v) => setForm((f) => ({ ...f, recipient: { ...f.recipient, city: v } }))} placeholder="City, CA 12345" />
@@ -292,73 +251,67 @@ export default function Home() {
               <Field label="Location" value={form.subject.location} onChange={(v) => setForm((f) => ({ ...f, subject: { ...f.subject, location: v } }))} placeholder="Address / cross-streets, City, CA 12345" />
             </section>
 
-            {/* Category + TOC */}
-            <section className="rounded-xl bg-slate-800 border border-slate-700 p-5 flex flex-col gap-4">
+            {/* Categories + TOC */}
+            <section className="rounded-xl bg-slate-800 border border-slate-700 p-5 flex flex-col gap-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Table of Contents</h3>
-              <Field
-                label="Category Header"
-                value={form.category}
-                onChange={(v) => setForm((f) => ({ ...f, category: v }))}
-                placeholder="e.g. On-Site Rough Grade Storm Drain Pipe and Fittings"
-              />
 
-              <div className="flex flex-col gap-2 mt-1">
-                <div className="grid grid-cols-[1fr_64px_64px_24px] gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
-                  <span>Description</span>
-                  <span className="text-center">Start</span>
-                  <span className="text-center">End</span>
-                  <span />
-                </div>
-                {form.lineItems.map((item, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_64px_64px_24px] gap-2 items-center">
+              {form.categories.map((cat, ci) => (
+                <div key={ci} className="flex flex-col gap-3 border border-slate-600 rounded-lg p-4">
+                  {/* Category header row */}
+                  <div className="flex items-center gap-2">
                     <input
-                      type="text"
-                      value={item.description}
-                      onChange={(e) => updateLineItem(i, "description", e.target.value)}
-                      className="rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-100
+                      type="text" value={cat.name}
+                      onChange={(e) => updateCatName(ci, e.target.value)}
+                      placeholder="Category name (e.g. On-Site Storm Drain Pipe and Fittings)"
+                      className="flex-1 rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm font-semibold text-slate-100
                                  placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Manufacturer - Product"
                     />
-                    <input
-                      type="number"
-                      value={item.startPage}
-                      onChange={(e) => updateLineItem(i, "startPage", parseInt(e.target.value) || 0)}
-                      className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <input
-                      type="number"
-                      value={item.endPage}
-                      onChange={(e) => updateLineItem(i, "endPage", parseInt(e.target.value) || 0)}
-                      className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      onClick={() => removeLineItem(i)}
-                      className="text-slate-500 hover:text-red-400 transition-colors text-lg leading-none"
-                      title="Remove row"
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => removeCategory(ci)}
+                      className="text-slate-500 hover:text-red-400 transition-colors text-lg leading-none px-1"
+                      title="Remove category">×</button>
                   </div>
-                ))}
-                <button
-                  onClick={addLineItem}
-                  className="mt-1 text-sm text-blue-400 hover:text-blue-300 text-left transition-colors"
-                >
-                  + Add row
-                </button>
-              </div>
+
+                  {/* Line items */}
+                  {cat.lineItems.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <div className="grid grid-cols-[1fr_64px_64px_24px] gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
+                        <span>Description</span><span className="text-center">Start</span><span className="text-center">End</span><span />
+                      </div>
+                      {cat.lineItems.map((item, ii) => (
+                        <div key={ii} className="grid grid-cols-[1fr_64px_64px_24px] gap-2 items-center">
+                          <input type="text" value={item.description}
+                            onChange={(e) => updateItem(ci, ii, "description", e.target.value)}
+                            className="rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-100
+                                       placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Manufacturer - Product" />
+                          <input type="number" value={item.startPage}
+                            onChange={(e) => updateItem(ci, ii, "startPage", parseInt(e.target.value) || 0)}
+                            className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <input type="number" value={item.endPage}
+                            onChange={(e) => updateItem(ci, ii, "endPage", parseInt(e.target.value) || 0)}
+                            className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <button onClick={() => removeItem(ci, ii)}
+                            className="text-slate-500 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={() => addItem(ci)}
+                    className="text-sm text-blue-400 hover:text-blue-300 text-left transition-colors">+ Add item</button>
+                </div>
+              ))}
+
+              <button onClick={addCategory}
+                className="text-sm text-slate-400 hover:text-slate-200 border border-slate-600 hover:border-slate-400 rounded-lg px-4 py-2 transition-colors text-center">
+                + Add category
+              </button>
             </section>
 
             {error && <p className="text-red-400 text-sm">{error}</p>}
 
-            <button
-              onClick={handleGenerate}
-              className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 py-3 font-semibold
-                         text-sm tracking-wide transition-colors"
-            >
-              Generate Submittal →
+            <button onClick={handleGenerate}
+              className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 py-3 font-semibold text-sm tracking-wide transition-colors">
+              Generate Excel →
             </button>
           </div>
         )}
@@ -371,7 +324,7 @@ export default function Home() {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
             <p className="text-slate-300 font-semibold">Building your submittal…</p>
-            <p className="text-slate-500 text-sm">Generating cover page and merging PDFs</p>
+            <p className="text-slate-500 text-sm">Generating formatted Excel package</p>
           </div>
         )}
 
@@ -386,32 +339,19 @@ export default function Home() {
               </div>
               <h2 className="text-2xl font-bold">Submittal Ready</h2>
               <p className="text-slate-400 text-sm">{downloadName}</p>
+              <p className="text-xs text-slate-500">Open in Excel · review · convert to PDF when ready</p>
             </div>
 
-            <a
-              href={downloadUrl}
-              download={downloadName}
-              className="rounded-lg bg-green-600 hover:bg-green-500 px-8 py-3 font-semibold
-                         text-sm tracking-wide transition-colors flex items-center gap-2"
-            >
+            <a href={downloadUrl} download={downloadName}
+              className="rounded-lg bg-green-600 hover:bg-green-500 px-8 py-3 font-semibold text-sm tracking-wide transition-colors flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Download PDF
+              Download .xlsx
             </a>
 
-            <button
-              onClick={() => {
-                setStep("upload");
-                setFile(null);
-                setForm(emptyData());
-                setDownloadUrl("");
-                setError("");
-              }}
-              className="text-sm text-slate-400 hover:text-slate-200 underline"
-            >
-              Start a new submittal
-            </button>
+            <button onClick={() => { setStep("upload"); setFile(null); setForm(emptyData()); setDownloadUrl(""); setError(""); }}
+              className="text-sm text-slate-400 hover:text-slate-200 underline">Start a new submittal</button>
           </div>
         )}
       </div>

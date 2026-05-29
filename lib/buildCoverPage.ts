@@ -98,9 +98,8 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
     try {
       logoImage = await pdfDoc.embedPng(logoBytes);
       const dims = logoImage.scale(1);
-      const scale = 200 / dims.width;
-      logoW = 200;
-      logoH = dims.height * scale;
+      logoW = 250;
+      logoH = dims.height * (logoW / dims.width);
     } catch {
       // Falls back to text placeholder below
     }
@@ -124,9 +123,9 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
   }
 
   // Center: logo image or text fallback
+  const logoX = (PAGE_W - logoW) / 2;
+  const logoY = headerTopY - logoH - 8;
   if (logoImage) {
-    const logoX = (PAGE_W - logoW) / 2;
-    const logoY = headerTopY - logoH - 8;
     page.drawImage(logoImage, { x: logoX, y: logoY, width: logoW, height: logoH });
   } else {
     // Text placeholder — two lines styled to suggest the logo
@@ -152,7 +151,7 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
 
   // Right: "Submittals" heading
   const submittalsStr = "Submittals";
-  const submittalsSize = 22;
+  const submittalsSize = 24;
   const submittalsW = helvBold.widthOfTextAtSize(submittalsStr, submittalsSize);
   page.drawText(submittalsStr, {
     x: PAGE_W - MARGIN - submittalsW,
@@ -206,7 +205,8 @@ export async function buildCoverPage(data: SubmittalData, logoBytes?: Uint8Array
   const col1W = Math.floor(CONTENT_W / 2); // 256
   const col2W = CONTENT_W - col1W;         // 256
 
-  const toSubjectTop = headerTopY - 118; // ~624
+  // Position table below logo (or fixed offset when no logo)
+  const toSubjectTop = logoH > 0 ? logoY - 14 : headerTopY - 118;
 
   // Header row
   drawCell(page, MARGIN, toSubjectTop, col1W, hdrH, GRAY_FILL);

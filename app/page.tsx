@@ -86,7 +86,6 @@ export default function Home() {
     try {
       const fd = new FormData();
       fd.append("data", JSON.stringify(form));
-      if (file) fd.append("pdf", file);
 
       const res = await fetch("/api/generate", { method: "POST", body: fd });
       if (!res.ok) {
@@ -98,7 +97,7 @@ export default function Home() {
       const blob = await res.blob();
       const disp = res.headers.get("Content-Disposition") ?? "";
       setDownloadUrl(URL.createObjectURL(blob));
-      setDownloadName(disp.match(/filename="([^"]+)"/)?.[1] ?? "Patriot_Submittal.pdf");
+      setDownloadName(disp.match(/filename="([^"]+)"/)?.[1] ?? "Patriot_Submittal.xlsx");
       setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
@@ -212,7 +211,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold mb-1">Review & Edit</h2>
-                <p className="text-slate-400 text-sm">Confirm the extracted details before generating the PDF.</p>
+                <p className="text-slate-400 text-sm">Confirm the extracted details before generating the Excel.</p>
               </div>
               <button onClick={() => { setStep("upload"); setError(""); }}
                 className="text-xs text-slate-400 hover:text-slate-200 underline">← Upload different file</button>
@@ -305,7 +304,7 @@ export default function Home() {
 
             <button onClick={handleGenerate}
               className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 py-3 font-semibold text-sm tracking-wide transition-colors">
-              Generate PDF →
+              Generate Excel →
             </button>
           </div>
         )}
@@ -318,7 +317,7 @@ export default function Home() {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
             <p className="text-slate-300 font-semibold">Building your submittal…</p>
-            <p className="text-slate-500 text-sm">Assembling Patriot cover + supplier data sheets</p>
+            <p className="text-slate-500 text-sm">Building formatted Excel cover sheet</p>
           </div>
         )}
 
@@ -340,7 +339,7 @@ export default function Home() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Download PDF
+              Download Excel
             </a>
 
             <button onClick={() => { setStep("upload"); setFile(null); setForm(emptyData()); setDownloadUrl(""); setError(""); }}

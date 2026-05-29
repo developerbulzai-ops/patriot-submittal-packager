@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractSubmittal } from "@/lib/extractSubmittal";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {

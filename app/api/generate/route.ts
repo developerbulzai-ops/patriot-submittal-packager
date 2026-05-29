@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildExcel } from "@/lib/buildExcel";
-import { renderPdfPages } from "@/lib/renderPdfPages";
+import { buildPdf } from "@/lib/buildPdf";
 import fs from "fs";
 import path from "path";
 import type { SubmittalData } from "@/types/submittal";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
 
 function slugify(str: string): string {
   return str
@@ -22,13 +20,11 @@ export async function POST(req: NextRequest) {
     let pdfBuffer: Buffer | undefined;
 
     const contentType = req.headers.get("content-type") ?? "";
-
     if (contentType.includes("multipart/form-data")) {
       const fd = await req.formData();
       const dataStr = fd.get("data");
       if (typeof dataStr !== "string") throw new Error("Missing form field: data");
       submittalData = JSON.parse(dataStr) as SubmittalData;
-
       const pdfFile = fd.get("pdf");
       if (pdfFile instanceof Blob) {
         pdfBuffer = Buffer.from(await pdfFile.arrayBuffer());
@@ -37,32 +33,24 @@ export async function POST(req: NextRequest) {
       submittalData = (await req.json()) as SubmittalData;
     }
 
+    if (!pdfBuffer) throw new Error("Supplier PDF is required");
+
     let logoBuffer: Buffer | undefined;
     try {
       const logoPath = path.join(process.cwd(), "public", "assets", "patriot_logo.png");
       logoBuffer = fs.readFileSync(logoPath);
-    } catch { /* use text fallback */ }
+    } catch { /* text fallback */ }
 
-    // Render supplier PDF pages (skip page 1 = their cover)
-    let pageImages;
-    if (pdfBuffer) {
-      try {
-        pageImages = await renderPdfPages(pdfBuffer);
-      } catch (renderErr) {
-        console.error("PDF render warning (continuing without pages):", renderErr);
-      }
-    }
-
-    const xlsxBuffer = await buildExcel(submittalData, logoBuffer, pageImages);
+    const pdfOut = await buildPdf(submittalData, logoBuffer, pdfBuffer);
 
     const jobPart = slugify(submittalData.jobNo || "Job");
     const projPart = slugify(submittalData.subject.projectName || "Submittal");
-    const filename = `${jobPart}_${projPart}_Submittal.xlsx`;
+    const filename = `${jobPart}_${projPart}_Submittal.pdf`;
 
-    return new NextResponse(xlsxBuffer as unknown as BodyInit, {
+    return new NextResponse(pdfOut as unknown as BodyInit, {
       status: 200,
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });

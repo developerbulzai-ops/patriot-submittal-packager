@@ -39,7 +39,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [form, setForm] = useState<SubmittalData>(emptyData());
   const [downloadUrl, setDownloadUrl] = useState("");
-  const [downloadName, setDownloadName] = useState("submittal.xlsx");
+  const [downloadName, setDownloadName] = useState("Submittal.pdf");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── drag and drop ─────────────────────────────────────────────────────────
@@ -59,10 +59,6 @@ export default function Home() {
   // ── extract ───────────────────────────────────────────────────────────────
   const handleExtract = async () => {
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      setError("File is too large for the current host (max 4 MB). Compress the PDF and try again.");
-      return;
-    }
     setExtracting(true); setError("");
     try {
       const fd = new FormData();
@@ -100,11 +96,9 @@ export default function Home() {
         throw new Error(msg);
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const disposition = res.headers.get("Content-Disposition") || "";
-      const match = disposition.match(/filename="([^"]+)"/);
-      setDownloadName(match?.[1] ?? "Patriot_Submittal.xlsx");
-      setDownloadUrl(url);
+      const disp = res.headers.get("Content-Disposition") ?? "";
+      setDownloadUrl(URL.createObjectURL(blob));
+      setDownloadName(disp.match(/filename="([^"]+)"/)?.[1] ?? "Patriot_Submittal.pdf");
       setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
@@ -164,7 +158,7 @@ export default function Home() {
           <div className="flex flex-col gap-8">
             <div>
               <h2 className="text-2xl font-bold mb-1">New Submittal</h2>
-              <p className="text-slate-400 text-sm">Upload a supplier submittal PDF to generate a Patriot-branded Excel package.</p>
+              <p className="text-slate-400 text-sm">Upload a supplier submittal PDF to generate a Patriot-branded package.</p>
             </div>
             <div
               className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed
@@ -218,7 +212,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold mb-1">Review & Edit</h2>
-                <p className="text-slate-400 text-sm">Confirm the extracted details before generating the Excel.</p>
+                <p className="text-slate-400 text-sm">Confirm the extracted details before generating the PDF.</p>
               </div>
               <button onClick={() => { setStep("upload"); setError(""); }}
                 className="text-xs text-slate-400 hover:text-slate-200 underline">← Upload different file</button>
@@ -311,7 +305,7 @@ export default function Home() {
 
             <button onClick={handleGenerate}
               className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 py-3 font-semibold text-sm tracking-wide transition-colors">
-              Generate Excel →
+              Generate PDF →
             </button>
           </div>
         )}
@@ -324,7 +318,7 @@ export default function Home() {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
             <p className="text-slate-300 font-semibold">Building your submittal…</p>
-            <p className="text-slate-500 text-sm">Generating formatted Excel package</p>
+            <p className="text-slate-500 text-sm">Assembling Patriot cover + supplier data sheets</p>
           </div>
         )}
 
@@ -339,7 +333,6 @@ export default function Home() {
               </div>
               <h2 className="text-2xl font-bold">Submittal Ready</h2>
               <p className="text-slate-400 text-sm">{downloadName}</p>
-              <p className="text-xs text-slate-500">Open in Excel · review · convert to PDF when ready</p>
             </div>
 
             <a href={downloadUrl} download={downloadName}
@@ -347,7 +340,7 @@ export default function Home() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Download .xlsx
+              Download PDF
             </a>
 
             <button onClick={() => { setStep("upload"); setFile(null); setForm(emptyData()); setDownloadUrl(""); setError(""); }}

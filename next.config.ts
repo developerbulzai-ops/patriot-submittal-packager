@@ -1,27 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   experimental: {
     serverActions: {
-      bodySizeLimit: "20mb",
+      bodySizeLimit: "100mb",
     },
   },
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // canvas is a native module — must not be bundled, require()d at runtime
-      // pdfjs-dist is handled via /* webpackIgnore: true */ at the import site
-      if (Array.isArray(config.externals)) {
-        config.externals = [...config.externals, "canvas"];
-      } else if (typeof config.externals === "function") {
-        config.externals = [config.externals, "canvas"];
-      } else if (config.externals) {
-        config.externals = [config.externals, "canvas"];
-      } else {
-        config.externals = ["canvas"];
-      }
-    }
-    return config;
-  },
+  // Do not bundle these packages — require() them from node_modules at runtime.
+  // Prevents webpack from choking on WASM, native bindings, or complex CJS/ESM packages.
+  serverExternalPackages: ["@anthropic-ai/sdk", "mupdf", "pdf-lib"],
 };
 
 export default nextConfig;

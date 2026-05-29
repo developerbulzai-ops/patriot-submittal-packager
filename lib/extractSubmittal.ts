@@ -15,6 +15,13 @@ CATEGORIES: Supplier cover sheets and section headers indicate the submittal cat
 Common categories: On-Site, Off-Site, Fire, Water, Storm Drain, Sewer — but use whatever the
 document actually says.
 
+CONSOLIDATION RULE — NON-CONSECUTIVE PAGES: If the same manufacturer or product name appears
+at multiple separate locations in the PDF (e.g. pages 3-5 AND pages 9-11), consolidate them into
+a single line item. Set startPage to the first occurrence's first page and endPage to the last
+occurrence's last page. Then set the "warning" field to a short message such as:
+"Non-consecutive pages detected (pages 3-5, 9-11) — consider regrouping in the supplier PDF before uploading."
+If all pages for a product are consecutive, set "warning" to null.
+
 Extract the following and return ONLY a valid JSON object (no markdown, no explanation):
 
 1. From the cover page (page 1): recipient info, job number, date, project name, location.
@@ -24,6 +31,7 @@ Extract the following and return ONLY a valid JSON object (no markdown, no expla
    - Record exact start and end page numbers in THIS PDF (1-indexed, page 1 = supplier cover)
    - Page 1 (supplier cover) is NOT a line item
    - If two manufacturers supply the same product, list them under one item
+   - Apply the consolidation rule above for non-consecutive occurrences
 
 Return this exact JSON structure:
 {
@@ -46,7 +54,8 @@ Return this exact JSON structure:
         {
           "description": "JM Eagle - 18\" SDR-35 PVC Pipe",
           "startPage": 2,
-          "endPage": 6
+          "endPage": 6,
+          "warning": null
         }
       ]
     }
@@ -57,7 +66,8 @@ Rules:
 - categories: detect ALL utility categories in the package; each gets its own object
 - lineItems within each category must cover all pages in that section with no gaps or overlaps
 - Page numbers are in the SUPPLIER PDF (not the final output)
-- Use highlighted/circled specs for item titles; never list the full range from the data sheet`;
+- Use highlighted/circled specs for item titles; never list the full range from the data sheet
+- Always include the "warning" field on every line item (null if pages are consecutive)`;
 
 function extractJSON(text: string): unknown {
   const cleaned = text
@@ -97,7 +107,7 @@ export async function extractSubmittal(
     subject: { projectName: string | null; location: string | null };
     categories: Array<{
       name: string;
-      lineItems: Array<{ description: string; startPage: number; endPage: number }>;
+      lineItems: Array<{ description: string; startPage: number; endPage: number; warning?: string | null }>;
     }>;
   };
 
@@ -109,6 +119,7 @@ export async function extractSubmittal(
       description: item.description,
       startPage: item.startPage + 1,
       endPage: item.endPage + 1,
+      warning: item.warning || undefined,
     })),
   }));
 

@@ -4,7 +4,9 @@ import type { PageImage } from "./renderPdfPages";
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 const COL_A = 1, COL_B = 2, COL_C = 3, COL_D = 4;
-const COL_WIDTHS = [26, 26, 31, 13]; // 96 chars → ~720 px (Letter – 1" margins)
+// [26, 22, 35, 13] = 96 chars → ~720 px (Letter – 1" margins)
+// A+B = 48, C+D = 48 — equal halves so To/Subject boxes are balanced
+const COL_WIDTHS = [26, 22, 35, 13];
 
 // Data-page image constants
 const IMG_DISPLAY_W = 720; // px — fills the 720 px printable width exactly
@@ -111,16 +113,17 @@ export async function buildExcel(
     size: 10, bold: true, hAlign: "right", vAlign: "middle",
   });
 
-  // Logo — centered in col B, rows 1–5
-  // patriot_logo_sq.png is 225×225 (1:1 square).
-  // Address rows 1–5 total 82 pt ≈ 109 px → display at 110×110 to fill header height.
-  // Horizontal centre of col B (26 chars ≈ 195 px): col offset ≈ 1 + 0.22 = 1.22
+  // Logo — perfectly page-centered, rows 1–5
+  // patriot_logo_sq.png: 225×225 px (1:1). Display at 110×110 px.
+  // Page total = 96 chars. Center = char 48 from left.
+  // Logo (110 px = 14.67 chars) left edge at char 48 − 7.33 = 40.67.
+  // Col B starts at char 26 (width 22) → offset 14.67/22 = 0.667 → col: 1.667
   if (logoBuffer) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const imgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
       ws.addImage(imgId, {
-        tl: { col: COL_B - 1 + 0.22, row: 0.0 },
+        tl: { col: COL_B - 1 + 0.667, row: 0.0 },
         ext: { width: 110, height: 110 },
       });
     } catch { /* skip logo on embed failure */ }
@@ -133,9 +136,9 @@ export async function buildExcel(
 
   // To / Subject header (row 8)
   merge(ws, row, COL_A, row, COL_B);
-  sc(ws, row, COL_A, { value: "To:", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
+  sc(ws, row, COL_A, { value: "To:", bold: true, indent: 1, fill: GRAY });
   merge(ws, row, COL_C, row, COL_D);
-  sc(ws, row, COL_C, { value: "Subject:", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
+  sc(ws, row, COL_C, { value: "Subject:", bold: true, indent: 1, fill: GRAY });
   ws.getRow(row).height = 18;
   row++;
 
@@ -150,10 +153,10 @@ export async function buildExcel(
   const bodyH = Math.max(toLines.length, subjectLines.length, 4) * 15 + 8;
 
   merge(ws, row, COL_A, row, COL_B);
-  sc(ws, row, COL_A, { value: toLines.join("\n"), wrap: true, vAlign: "top", indent: 1, border: ALL_BORDERS });
+  sc(ws, row, COL_A, { value: toLines.join("\n"), wrap: true, vAlign: "top", indent: 1 });
   ws.getRow(row).height = bodyH;
   merge(ws, row, COL_C, row, COL_D);
-  sc(ws, row, COL_C, { value: subjectLines.join("\n"), wrap: true, vAlign: "top", indent: 1, border: ALL_BORDERS });
+  sc(ws, row, COL_C, { value: subjectLines.join("\n"), wrap: true, vAlign: "top", indent: 1 });
   row++;
 
   // Spacer
@@ -161,22 +164,22 @@ export async function buildExcel(
 
   // TOC header (row 12)
   merge(ws, row, COL_A, row, COL_C);
-  sc(ws, row, COL_A, { value: "Item", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
-  sc(ws, row, COL_D, { value: "Page Number", bold: true, hAlign: "right", indent: 1, fill: GRAY, border: ALL_BORDERS });
+  sc(ws, row, COL_A, { value: "Item", bold: true, indent: 1, fill: GRAY });
+  sc(ws, row, COL_D, { value: "Page Number", bold: true, hAlign: "right", indent: 1, fill: GRAY });
   ws.getRow(row).height = 18;
   row++;
 
   // TOC rows (row 13+)
   for (const cat of data.categories) {
     merge(ws, row, COL_A, row, COL_D);
-    sc(ws, row, COL_A, { value: cat.name, bold: true, hAlign: "center", border: ALL_BORDERS });
+    sc(ws, row, COL_A, { value: cat.name, bold: true, hAlign: "center" });
     ws.getRow(row).height = 16;
     row++;
     for (const item of cat.lineItems) {
       const pg = item.startPage === item.endPage ? `${item.startPage}` : `${item.startPage}-${item.endPage}`;
       merge(ws, row, COL_A, row, COL_C);
-      sc(ws, row, COL_A, { value: item.description, indent: 2, border: ALL_BORDERS });
-      sc(ws, row, COL_D, { value: pg, hAlign: "right", indent: 1, border: ALL_BORDERS });
+      sc(ws, row, COL_A, { value: item.description, indent: 2 });
+      sc(ws, row, COL_D, { value: pg, hAlign: "right", indent: 1 });
       ws.getRow(row).height = 15;
       row++;
     }

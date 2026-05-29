@@ -160,6 +160,17 @@ export default function Home() {
               <h2 className="text-2xl font-bold mb-1">New Submittal</h2>
               <p className="text-slate-400 text-sm">Upload a supplier submittal PDF to generate a Patriot-branded package.</p>
             </div>
+
+            {/* Pre-upload checklist */}
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+              <p className="font-semibold text-amber-400 mb-2">Before uploading — prepare your PDF:</p>
+              <ul className="space-y-1 text-slate-300">
+                <li className="flex items-start gap-2"><span className="text-amber-400 shrink-0">•</span><span>Group all pages from the same product and manufacturer <strong>consecutively</strong> — do not split them across the document</span></li>
+                <li className="flex items-start gap-2"><span className="text-amber-400 shrink-0">•</span><span>Remove any duplicate or separated pages from the same supplier before uploading</span></li>
+              </ul>
+              <p className="text-slate-500 text-xs mt-2">This prevents page-numbering gaps in the generated submittal. The AI will flag any issues it detects.</p>
+            </div>
+
             <div
               className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed
                           p-14 transition-colors cursor-pointer
@@ -272,20 +283,27 @@ export default function Home() {
                         <span>Description</span><span className="text-center">Start</span><span className="text-center">End</span><span />
                       </div>
                       {cat.lineItems.map((item, ii) => (
-                        <div key={ii} className="grid grid-cols-[1fr_64px_64px_24px] gap-2 items-center">
-                          <input type="text" value={item.description}
-                            onChange={(e) => updateItem(ci, ii, "description", e.target.value)}
-                            className="rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-100
-                                       placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Manufacturer - Product" />
-                          <input type="number" value={item.startPage}
-                            onChange={(e) => updateItem(ci, ii, "startPage", parseInt(e.target.value) || 0)}
-                            className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <input type="number" value={item.endPage}
-                            onChange={(e) => updateItem(ci, ii, "endPage", parseInt(e.target.value) || 0)}
-                            className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <button onClick={() => removeItem(ci, ii)}
-                            className="text-slate-500 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                        <div key={ii} className="flex flex-col gap-1">
+                          <div className="grid grid-cols-[1fr_64px_64px_24px] gap-2 items-center">
+                            <input type="text" value={item.description}
+                              onChange={(e) => updateItem(ci, ii, "description", e.target.value)}
+                              className="rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-100
+                                         placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Manufacturer - Product" />
+                            <input type="number" value={item.startPage}
+                              onChange={(e) => updateItem(ci, ii, "startPage", parseInt(e.target.value) || 0)}
+                              className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            <input type="number" value={item.endPage}
+                              onChange={(e) => updateItem(ci, ii, "endPage", parseInt(e.target.value) || 0)}
+                              className="rounded bg-slate-700 border border-slate-600 px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            <button onClick={() => removeItem(ci, ii)}
+                              className="text-slate-500 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                          </div>
+                          {item.warning && (
+                            <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
+                              ⚠ {item.warning}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>

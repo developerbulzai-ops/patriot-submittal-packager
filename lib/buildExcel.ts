@@ -16,12 +16,10 @@ import type { PageImage } from "./renderPdfPages";
 const COL_A = 1, COL_B = 2, COL_C = 3, COL_D = 4, COL_E = 5, COL_F = 6;
 const COL_WIDTHS = [2, 20, 26, 20, 15, 13];
 
-// Page-center logo placement:
-//   char 48 = centre of 96-char page width
-//   logo 110 px = 14.67 chars  →  left edge at char 40.67
-//   col C starts at char 48−26=22; offset into C = (40.67−22)/26 = 0.718
-//   → tl.col = COL_C − 1 + 0.718 = 2.718
-const LOGO_COL = COL_C - 1 + 0.718; // 2.718
+// Logo placement: left edge at the C/D column boundary so the image
+// straddles that line and the visual centre sits between cols C and D.
+// COL_D − 1 = 3 (0-indexed start of col D = end of col C).
+const LOGO_COL = COL_D - 1; // 3.0
 
 // Data-page image constants
 const IMG_DISPLAY_W = 720;
@@ -183,13 +181,13 @@ export async function buildExcel(
     merge(ws, row, COL_A, row, COL_C);
     sc(ws, row, COL_A, {
       ...(toLines[i] ? { value: toLines[i] } : {}),
-      indent: 1, vAlign: "middle", border: ALL_BORDERS,
+      hAlign: "left", vAlign: "middle", border: ALL_BORDERS,
     });
 
     merge(ws, row, COL_D, row, COL_F);
     sc(ws, row, COL_D, {
       ...(subjectLines[i] ? { value: subjectLines[i] } : {}),
-      indent: 1, vAlign: "middle", border: ALL_BORDERS,
+      hAlign: "left", vAlign: "middle", border: ALL_BORDERS,
     });
 
     ws.getRow(row).height = 16;
@@ -201,7 +199,7 @@ export async function buildExcel(
 
   // ── TOC header ────────────────────────────────────────────────────────────
   merge(ws, row, COL_A, row, COL_E);
-  sc(ws, row, COL_A, { value: "Item", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
+  sc(ws, row, COL_A, { value: "Item", bold: true, hAlign: "center", fill: GRAY, border: ALL_BORDERS });
   sc(ws, row, COL_F, { value: "Page Number", bold: true, hAlign: "right", indent: 1, fill: GRAY, border: ALL_BORDERS });
   ws.getRow(row).height = 18;
   row++;

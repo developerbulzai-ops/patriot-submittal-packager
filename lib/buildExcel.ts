@@ -31,6 +31,8 @@ const BLANK_ROWS    = 8;
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const GRAY: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+const THIN: Partial<ExcelJS.Border> = { style: "thin" };
+const ALL_BORDERS: Partial<ExcelJS.Borders> = { top: THIN, bottom: THIN, left: THIN, right: THIN };
 const FONT = "Calibri";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -44,6 +46,7 @@ function sc(
     vAlign?: ExcelJS.Alignment["vertical"];
     wrap?: boolean; indent?: number;
     fill?: ExcelJS.Fill;
+    border?: Partial<ExcelJS.Borders>;
   }
 ) {
   const c = ws.getRow(row).getCell(col);
@@ -55,7 +58,8 @@ function sc(
     wrapText:   opts.wrap   ?? false,
     indent:     opts.indent ?? 0,
   };
-  if (opts.fill) c.fill = opts.fill;
+  if (opts.fill)   c.fill   = opts.fill;
+  if (opts.border) c.border = opts.border;
 }
 
 function merge(ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) {
@@ -153,9 +157,9 @@ export async function buildExcel(
 
   // ── To / Subject header ───────────────────────────────────────────────────
   merge(ws, row, COL_A, row, COL_C);
-  sc(ws, row, COL_A, { value: "To:", bold: true, indent: 1, fill: GRAY });
+  sc(ws, row, COL_A, { value: "To:", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
   merge(ws, row, COL_D, row, COL_F);
-  sc(ws, row, COL_D, { value: "Subject:", bold: true, indent: 1, fill: GRAY });
+  sc(ws, row, COL_D, { value: "Subject:", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
   ws.getRow(row).height = 18;
   row++;
 
@@ -177,10 +181,16 @@ export async function buildExcel(
 
   for (let i = 0; i < bodyRows; i++) {
     merge(ws, row, COL_A, row, COL_C);
-    if (toLines[i]) sc(ws, row, COL_A, { value: toLines[i], indent: 1, vAlign: "middle" });
+    sc(ws, row, COL_A, {
+      ...(toLines[i] ? { value: toLines[i] } : {}),
+      indent: 1, vAlign: "middle", border: ALL_BORDERS,
+    });
 
     merge(ws, row, COL_D, row, COL_F);
-    if (subjectLines[i]) sc(ws, row, COL_D, { value: subjectLines[i], indent: 1, vAlign: "middle" });
+    sc(ws, row, COL_D, {
+      ...(subjectLines[i] ? { value: subjectLines[i] } : {}),
+      indent: 1, vAlign: "middle", border: ALL_BORDERS,
+    });
 
     ws.getRow(row).height = 16;
     row++;
@@ -191,8 +201,8 @@ export async function buildExcel(
 
   // ── TOC header ────────────────────────────────────────────────────────────
   merge(ws, row, COL_A, row, COL_E);
-  sc(ws, row, COL_A, { value: "Item", bold: true, indent: 1, fill: GRAY });
-  sc(ws, row, COL_F, { value: "Page Number", bold: true, hAlign: "right", indent: 1, fill: GRAY });
+  sc(ws, row, COL_A, { value: "Item", bold: true, indent: 1, fill: GRAY, border: ALL_BORDERS });
+  sc(ws, row, COL_F, { value: "Page Number", bold: true, hAlign: "right", indent: 1, fill: GRAY, border: ALL_BORDERS });
   ws.getRow(row).height = 18;
   row++;
 

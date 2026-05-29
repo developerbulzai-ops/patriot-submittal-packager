@@ -16,10 +16,12 @@ import type { PageImage } from "./renderPdfPages";
 const COL_A = 1, COL_B = 2, COL_C = 3, COL_D = 4, COL_E = 5, COL_F = 6;
 const COL_WIDTHS = [2, 20, 26, 20, 15, 13];
 
-// Logo placement: left edge at the C/D column boundary so the image
-// straddles that line and the visual centre sits between cols C and D.
-// COL_D − 1 = 3 (0-indexed start of col D = end of col C).
-const LOGO_COL = COL_D - 1; // 3.0
+// Logo: horizontally centred on the sheet.
+// Total = 96 chars. Centre = char 48. Logo 110 px = 14.67 chars.
+// Left edge at char 48 − 7.33 = 40.67. Col C (index 2) starts at char 22.
+// Offset into col C = 18.67 / 26 = 0.718 → tl.col = 2.718.
+const LOGO_COL = 2.718;
+const LOGO_ROW = 0.15; // slight top margin — matches reference header height
 
 // Data-page image constants
 const IMG_DISPLAY_W = 720;
@@ -142,7 +144,7 @@ export async function buildExcel(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const imgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
       ws.addImage(imgId, {
-        tl: { col: LOGO_COL, row: 0.0 },
+        tl: { col: LOGO_COL, row: LOGO_ROW },
         ext: { width: 110, height: 110 },
       });
     } catch { /* skip logo on embed failure */ }
@@ -181,13 +183,13 @@ export async function buildExcel(
     merge(ws, row, COL_A, row, COL_C);
     sc(ws, row, COL_A, {
       ...(toLines[i] ? { value: toLines[i] } : {}),
-      hAlign: "left", vAlign: "middle", border: ALL_BORDERS,
+      hAlign: "left", vAlign: "middle",
     });
 
     merge(ws, row, COL_D, row, COL_F);
     sc(ws, row, COL_D, {
       ...(subjectLines[i] ? { value: subjectLines[i] } : {}),
-      hAlign: "left", vAlign: "middle", border: ALL_BORDERS,
+      hAlign: "left", vAlign: "middle",
     });
 
     ws.getRow(row).height = 16;

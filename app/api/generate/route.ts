@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     let logoBuffer: Buffer | undefined;
     try {
-      const logoPath = path.join(process.cwd(), "public", "assets", "patriot_logo.png");
+      const logoPath = path.join(process.cwd(), "public", "assets", "patriot_logo_sq.png");
       logoBuffer = fs.readFileSync(logoPath);
     } catch { /* text fallback */ }
 

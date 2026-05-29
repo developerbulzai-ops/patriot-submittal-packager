@@ -111,14 +111,17 @@ export async function buildExcel(
     size: 10, bold: true, hAlign: "right", vAlign: "middle",
   });
 
-  // Logo — col B, rows 1–5 (1320 × 506 px → display 225 × 86 px)
+  // Logo — centered in col B, rows 1–5
+  // patriot_logo_sq.png is 225×225 (1:1 square).
+  // Address rows 1–5 total 82 pt ≈ 109 px → display at 110×110 to fill header height.
+  // Horizontal centre of col B (26 chars ≈ 195 px): col offset ≈ 1 + 0.22 = 1.22
   if (logoBuffer) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const imgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
       ws.addImage(imgId, {
-        tl: { col: COL_B - 1 + 0.05, row: 0.1 },
-        ext: { width: 225, height: 86 },
+        tl: { col: COL_B - 1 + 0.22, row: 0.0 },
+        ext: { width: 110, height: 110 },
       });
     } catch { /* skip logo on embed failure */ }
   }

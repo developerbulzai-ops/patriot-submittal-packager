@@ -86,6 +86,7 @@ export default function Home() {
     try {
       const fd = new FormData();
       fd.append("data", JSON.stringify(form));
+      if (file) fd.append("pdf", file);
 
       const res = await fetch("/api/generate", { method: "POST", body: fd });
       if (!res.ok) {
@@ -317,7 +318,7 @@ export default function Home() {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
             <p className="text-slate-300 font-semibold">Building your submittal…</p>
-            <p className="text-slate-500 text-sm">Building formatted Excel cover sheet</p>
+            <p className="text-slate-500 text-sm">Rendering cover sheet + supplier data pages…</p>
           </div>
         )}
 

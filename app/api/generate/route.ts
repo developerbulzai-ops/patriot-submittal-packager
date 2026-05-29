@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildExcel } from "@/lib/buildExcel";
+import { renderPdfPages } from "@/lib/renderPdfPages";
 import fs from "fs";
 import path from "path";
 import type { SubmittalData } from "@/types/submittal";
@@ -17,6 +18,7 @@ function slugify(str: string): string {
 export async function POST(req: NextRequest) {
   try {
     let submittalData: SubmittalData;
+    let pdfBuffer: Buffer | undefined;
 
     const contentType = req.headers.get("content-type") ?? "";
     if (contentType.includes("multipart/form-data")) {
@@ -24,6 +26,10 @@ export async function POST(req: NextRequest) {
       const dataStr = fd.get("data");
       if (typeof dataStr !== "string") throw new Error("Missing form field: data");
       submittalData = JSON.parse(dataStr) as SubmittalData;
+      const pdfFile = fd.get("pdf");
+      if (pdfFile instanceof Blob) {
+        pdfBuffer = Buffer.from(await pdfFile.arrayBuffer());
+      }
     } else {
       submittalData = (await req.json()) as SubmittalData;
     }
@@ -34,7 +40,17 @@ export async function POST(req: NextRequest) {
       logoBuffer = fs.readFileSync(logoPath);
     } catch { /* text fallback */ }
 
-    const xlsxBuffer = await buildExcel(submittalData, logoBuffer);
+    // Render supplier data sheet pages as images (skip page 1 = their cover)
+    let pageImages;
+    if (pdfBuffer) {
+      try {
+        pageImages = await renderPdfPages(pdfBuffer);
+      } catch (err) {
+        console.error("PDF render warning (continuing without data pages):", err);
+      }
+    }
+
+    const xlsxBuffer = await buildExcel(submittalData, logoBuffer, pageImages);
 
     const jobPart = slugify(submittalData.jobNo || "Job");
     const projPart = slugify(submittalData.subject.projectName || "Submittal");

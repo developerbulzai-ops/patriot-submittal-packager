@@ -5,6 +5,11 @@ import type { SubmittalData, CategoryGroup, LineItem } from "@/types/submittal";
 
 type Step = "upload" | "review" | "generating" | "done";
 
+// Backstop only — the server now uploads via the Anthropic Files API, so the old
+// ~32MB request cap no longer applies. This keeps pathological uploads from
+// failing later with a cryptic error and gives the user a clear message instead.
+const MAX_FILE_MB = 100;
+
 const emptyData = (): SubmittalData => ({
   jobNo: "",
   date: "",
@@ -47,13 +52,22 @@ export default function Home() {
     e.preventDefault();
     setDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped?.type === "application/pdf") { setFile(dropped); setError(""); }
-    else setError("Please upload a PDF file.");
+    if (dropped?.type !== "application/pdf") { setError("Please upload a PDF file."); return; }
+    if (dropped.size > MAX_FILE_MB * 1024 * 1024) {
+      setError(`That PDF is ${(dropped.size / 1024 / 1024).toFixed(1)} MB. Please upload a file under ${MAX_FILE_MB} MB.`);
+      return;
+    }
+    setFile(dropped); setError("");
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0];
-    if (picked) { setFile(picked); setError(""); }
+    if (!picked) return;
+    if (picked.size > MAX_FILE_MB * 1024 * 1024) {
+      setError(`That PDF is ${(picked.size / 1024 / 1024).toFixed(1)} MB. Please upload a file under ${MAX_FILE_MB} MB.`);
+      return;
+    }
+    setFile(picked); setError("");
   };
 
   // ── extract ───────────────────────────────────────────────────────────────

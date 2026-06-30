@@ -24,10 +24,18 @@ const LOGO_COL = 2.718;
 const LOGO_ROW = 0.15; // slight top margin — matches reference header height
 
 // Data-page image constants
-const IMG_DISPLAY_W = 720;
-const PX_TO_PT      = 0.75;
-const IMG_ROW_H     = 90;
-const BLANK_ROWS    = 8;
+// Printable area of a Letter portrait page with 0.5" margins (no header/footer):
+//   width  = (8.5 − 1.0)" = 7.5" = 720px  (96px/in)
+//   height = (11  − 1.0)" = 10"  = 960px
+// Height is capped a touch under 960 so row-height rounding can't tip a
+// full-height image onto a second print page. Each supplier image is scaled to
+// fit BOTH bounds (aspect ratio preserved), so any source page — regardless of
+// its dimensions — lands fully on one output page.
+const PRINT_W_PX = 720;
+const PRINT_H_PX = 940;
+const PX_TO_PT   = 0.75;
+const IMG_ROW_H  = 90;
+const BLANK_ROWS = 8;
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const GRAY: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
@@ -68,6 +76,22 @@ function merge(ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: nu
 
 function spacer(ws: ExcelJS.Worksheet, row: number, h = 8) {
   ws.getRow(row).height = h;
+}
+
+// Convert a horizontal pixel offset (from the left of the A–F print area) into a
+// fractional 0-based column index, so an image narrower than the full print
+// width can be centered. Uses the same px-per-char ratio the column layout
+// assumes (PRINT_W_PX across the total column width).
+function pxToCol(targetPx: number): number {
+  const totalChars = COL_WIDTHS.reduce((a, b) => a + b, 0);
+  const pxPerChar = PRINT_W_PX / totalChars;
+  let acc = 0;
+  for (let i = 0; i < COL_WIDTHS.length; i++) {
+    const colPx = COL_WIDTHS[i] * pxPerChar;
+    if (targetPx <= acc + colPx) return i + (targetPx - acc) / colPx;
+    acc += colPx;
+  }
+  return COL_WIDTHS.length;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -251,18 +275,30 @@ export async function buildExcel(
   if (pageImages && pageImages.length > 0) {
     for (const img of pageImages) {
       const imgStartRow = row;
-      const displayH = Math.round(IMG_DISPLAY_W * img.height / img.width);
+
+      // Scale to fit BOTH the printable width and height while preserving the
+      // source aspect ratio. Width-limited pages (normal portrait sheets) keep
+      // their full 720px width; taller/odd-sized pages are scaled down by height
+      // so they never overflow onto a second print page.
+      const scale    = Math.min(PRINT_W_PX / img.width, PRINT_H_PX / img.height);
+      const displayW = Math.max(1, Math.round(img.width  * scale));
+      const displayH = Math.max(1, Math.round(img.height * scale));
+
       const totalPt  = Math.round(displayH * PX_TO_PT);
       const numRows  = Math.max(1, Math.ceil(totalPt / IMG_ROW_H));
       const rowH     = Math.ceil(totalPt / numRows);
 
       for (let i = 0; i < numRows; i++) { ws.getRow(row).height = rowH; row++; }
 
+      // Center horizontally — only matters for height-limited images narrower
+      // than the full print width; full-width images resolve to col 0.
+      const leftCol = pxToCol((PRINT_W_PX - displayW) / 2);
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const imgId = wb.addImage({ buffer: img.buffer as any, extension: "png" });
       ws.addImage(imgId, {
-        tl: { col: 0, row: imgStartRow - 1 },
-        ext: { width: IMG_DISPLAY_W, height: displayH },
+        tl: { col: leftCol, row: imgStartRow - 1 },
+        ext: { width: displayW, height: displayH },
       });
       ws.getRow(row - 1).addPageBreak();
     }

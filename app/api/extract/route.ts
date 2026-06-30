@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not configured. Add it to your Vercel environment variables." },
+      { error: "ANTHROPIC_API_KEY is not configured. Add it to your Railway environment variables." },
       { status: 500 }
     );
   }

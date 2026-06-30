@@ -1,5 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { toFile } from "@anthropic-ai/sdk";
 import type { SubmittalData, CategoryGroup } from "@/types/submittal";
+
+const FILES_API_BETA = "files-api-2025-04-14";
 
 const EXTRACTION_PROMPT = `You are analyzing a supplier submittal PDF for a construction project.
 
@@ -81,61 +83,77 @@ export async function extractSubmittal(
   pdfBuffer: Buffer
 ): Promise<Partial<SubmittalData> & { categories: CategoryGroup[] }> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const base64Pdf = pdfBuffer.toString("base64");
 
-  const content: Anthropic.MessageParam["content"] = [
-    {
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: base64Pdf },
-    } as Anthropic.DocumentBlockParam,
-    { type: "text", text: EXTRACTION_PROMPT },
-  ];
-
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    messages: [{ role: "user", content }],
+  // Upload the PDF via the Files API and reference it by file_id, instead of
+  // inlining base64 in the request body. Base64 inflates the payload ~33% and
+  // the Messages API caps a single request at 32MB; the Files API (500MB limit)
+  // removes that ceiling.
+  const uploaded = await anthropic.beta.files.upload({
+    file: await toFile(pdfBuffer, "submittal.pdf", { type: "application/pdf" }),
+    betas: [FILES_API_BETA],
   });
 
-  const responseText =
-    message.content[0].type === "text" ? message.content[0].text : "{}";
+  try {
+    const message = await anthropic.beta.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      betas: [FILES_API_BETA],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "document", source: { type: "file", file_id: uploaded.id } },
+            { type: "text", text: EXTRACTION_PROMPT },
+          ],
+        },
+      ],
+    });
 
-  const raw = extractJSON(responseText) as {
-    jobNo: string | null;
-    date: string | null;
-    recipient: { company: string | null; attention: string | null; address1: string | null; city: string | null };
-    subject: { projectName: string | null; location: string | null };
-    categories: Array<{
-      name: string;
-      lineItems: Array<{ description: string; startPage: number; endPage: number; warning?: string | null }>;
-    }>;
-  };
+    const responseText =
+      message.content[0].type === "text" ? message.content[0].text : "{}";
 
-  // Page number mapping: supplier cover (page 1) stripped, Patriot title = page 1,
-  // blank sheet = page 2, so supplier page K → output page K+1.
-  const categories: CategoryGroup[] = (raw.categories || []).map((cat) => ({
-    name: cat.name || "",
-    lineItems: (cat.lineItems || []).map((item) => ({
-      description: item.description,
-      startPage: item.startPage + 1,
-      endPage: item.endPage + 1,
-      warning: item.warning || undefined,
-    })),
-  }));
+    const raw = extractJSON(responseText) as {
+      jobNo: string | null;
+      date: string | null;
+      recipient: { company: string | null; attention: string | null; address1: string | null; city: string | null };
+      subject: { projectName: string | null; location: string | null };
+      categories: Array<{
+        name: string;
+        lineItems: Array<{ description: string; startPage: number; endPage: number; warning?: string | null }>;
+      }>;
+    };
 
-  return {
-    jobNo: raw.jobNo || "",
-    date: raw.date || "",
-    recipient: {
-      company: raw.recipient?.company || "",
-      attention: raw.recipient?.attention || "",
-      address1: raw.recipient?.address1 || "",
-      city: raw.recipient?.city || "",
-    },
-    subject: {
-      projectName: raw.subject?.projectName || "",
-      location: raw.subject?.location || "",
-    },
-    categories,
-  };
+    // Page number mapping: supplier cover (page 1) stripped, Patriot title = page 1,
+    // blank sheet = page 2, so supplier page K → output page K+1.
+    const categories: CategoryGroup[] = (raw.categories || []).map((cat) => ({
+      name: cat.name || "",
+      lineItems: (cat.lineItems || []).map((item) => ({
+        description: item.description,
+        startPage: item.startPage + 1,
+        endPage: item.endPage + 1,
+        warning: item.warning || undefined,
+      })),
+    }));
+
+    return {
+      jobNo: raw.jobNo || "",
+      date: raw.date || "",
+      recipient: {
+        company: raw.recipient?.company || "",
+        attention: raw.recipient?.attention || "",
+        address1: raw.recipient?.address1 || "",
+        city: raw.recipient?.city || "",
+      },
+      subject: {
+        projectName: raw.subject?.projectName || "",
+        location: raw.subject?.location || "",
+      },
+      categories,
+    };
+  } finally {
+    // Best-effort cleanup — uploaded files persist until explicitly deleted.
+    await anthropic.beta.files
+      .delete(uploaded.id, { betas: [FILES_API_BETA] })
+      .catch(() => {});
+  }
 }
